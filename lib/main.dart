@@ -1,67 +1,91 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
-import 'package:mapmyindia_gl/mapmyindia_gl.dart';
 
-void main() {
-  runApp(MapWithCurrentLocation());
-}
+class MapSample extends StatefulWidget {
+  const MapSample({Key? key}) : super(key: key);
 
-class MapWithCurrentLocation extends StatefulWidget {
   @override
-  _MapWithCurrentLocationState createState() => _MapWithCurrentLocationState();
+  State<MapSample> createState() => MapSampleState();
 }
 
-class _MapWithCurrentLocationState extends State<MapWithCurrentLocation> {
+class MapSampleState extends State<MapSample> {
+  Completer<GoogleMapController> _controller = Completer<GoogleMapController>();
   LocationData? _currentLocation;
-  MapmyIndiaMapController? _mapController;
+  Location _location = Location();
+
+  static const LatLng _center = const LatLng(37.42796133580664, -122.085749655962);
+  static const LatLng _lakeLocation = const LatLng(37.43296265331129, -122.08832357078792);
 
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
-  }
-
-  Future<void> _getCurrentLocation() async {
-    try {
-      Location location = Location();
-      LocationData currentLocation = await location.getLocation();
-      setState(() {
-        _currentLocation = currentLocation;
-      });
-    } catch (e) {
-      print('Error getting current location: $e');
-    }
+    _requestLocationPermission();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: Text('Map with Current Location'),
-        ),
-        body: Stack(
-          children: [
-            if (_currentLocation != null)
-              MapmyIndiaMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(
-                    _currentLocation!.latitude!,
-                    _currentLocation!.longitude!,
-                  ),
-                  zoom: 14.0,
-                ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                },
-              ),
-            if (_currentLocation == null)
-              Center(
-                child: CircularProgressIndicator(),
-              ),
-          ],
-        ),
+    return Scaffold(
+      body: GoogleMap(
+        mapType: MapType.hybrid,
+        initialCameraPosition: CameraPosition(target: _center, zoom: 14.0),
+        onMapCreated: (GoogleMapController controller) {
+          _controller.complete(controller);
+        },
+        markers: Set<Marker>.from([
+          Marker(markerId: MarkerId('lake'), position: _lakeLocation, infoWindow: InfoWindow(title: 'Lake')),
+        ]),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (_currentLocation != null) {
+            _goToLocation(_lakeLocation);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location not available')));
+          }
+        },
+        label: const Text('To the lake!'),
+        icon: const Icon(Icons.directions_boat),
       ),
     );
   }
+
+  Future<void> _goToLocation(LatLng location) async {
+    final GoogleMapController controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: location, zoom: 18.0)));
+  }
+
+  Future<void> _requestLocationPermission() async {
+    var permission = await _location.hasPermission();
+    if (permission == PermissionStatus.denied) {
+      permission = await _location.requestPermission();
+      if (permission != PermissionStatus.granted) {
+        // Handle the scenario when the permission is not granted.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location permission required')));
+      } else {
+        _getLocation();
+      }
+    } else {
+      _getLocation();
+    }
+  }
+
+  Future<void> _getLocation() async {
+    try {
+      var location = await _location.getLocation();
+      setState(() {
+        _currentLocation = location;
+      });
+    } catch (e) {
+      // Handle any errors that occur while fetching the location.
+      print('Error getting location: $e');
+    }
+  }
+}
+
+void main() {
+  runApp(const MaterialApp(
+    home: MapSample(),
+  ));
 }
