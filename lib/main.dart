@@ -1,91 +1,126 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 
-class MapSample extends StatefulWidget {
-  const MapSample({Key? key}) : super(key: key);
+import 'MyPage.dart';
+
+void main() => runApp(
+  MaterialApp(
+    home: MyApp(),
+  ),
+);
+
+class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
 
   @override
-  State<MapSample> createState() => MapSampleState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class MapSampleState extends State<MapSample> {
-  Completer<GoogleMapController> _controller = Completer<GoogleMapController>();
-  LocationData? _currentLocation;
-  Location _location = Location();
+class _MyAppState extends State<MyApp> {
+  late GoogleMapController mapController;
+  late Location location;
+  bool _isLocationEnabled = false;
+  late LatLng _currentLocation;
 
-  static const LatLng _center = const LatLng(37.42796133580664, -122.085749655962);
-  static const LatLng _lakeLocation = const LatLng(37.43296265331129, -122.08832357078792);
+  final LatLng _center = const LatLng(45.521563, -122.677433);
 
   @override
   void initState() {
     super.initState();
-    _requestLocationPermission();
+    location = Location();
+    _getCurrentLocation();
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      setState(() {
+        _currentLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+      });
+    });
+  }
+
+  void _onMapCreated(GoogleMapController controller) {
+    mapController = controller;
+    if (_isLocationEnabled) {
+      mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentLocation, 15.0),
+      );
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final currentLocationData = await location.getLocation();
+      setState(() {
+        _currentLocation = LatLng(currentLocationData.latitude!, currentLocationData.longitude!);
+        _isLocationEnabled = true;
+      });
+    } catch (error) {
+      print("Error getting current location: $error");
+    }
+  }
+
+  Future<void> _openForm(BuildContext context) async {
+    // Implement code to open the form here
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MyPage()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GoogleMap(
-        mapType: MapType.hybrid,
-        initialCameraPosition: CameraPosition(target: _center, zoom: 14.0),
-        onMapCreated: (GoogleMapController controller) {
-          _controller.complete(controller);
-        },
-        markers: Set<Marker>.from([
-          Marker(markerId: MarkerId('lake'), position: _lakeLocation, infoWindow: InfoWindow(title: 'Lake')),
-        ]),
+    return MaterialApp(
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green[700],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (_currentLocation != null) {
-            _goToLocation(_lakeLocation);
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location not available')));
-          }
-        },
-        label: const Text('To the lake!'),
-        icon: const Icon(Icons.directions_boat),
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Maps Sample App'),
+          elevation: 2,
+        ),
+        body: Stack(
+          children: [
+            GoogleMap(
+              onMapCreated: _onMapCreated,
+              initialCameraPosition: CameraPosition(
+                target: _center,
+                zoom: 11.0,
+              ),
+              markers: _isLocationEnabled
+                  ? {
+                Marker(
+                  markerId: MarkerId('currentLocation'),
+                  position: _currentLocation,
+                  infoWindow: const InfoWindow(
+                    title: 'Current Location',
+                  ),
+                ),
+              }
+                  : {},
+            ),
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton(
+                onPressed: _getCurrentLocation,
+                tooltip: 'Get Current Location',
+                child: Icon(Icons.location_searching),
+              ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child:ElevatedButton(
+                onPressed: () {
+                  _openForm(context);
+                },
+                child: Icon(Icons.add),
+              )
+
+            ),
+          ],
+        ),
       ),
     );
   }
-
-  Future<void> _goToLocation(LatLng location) async {
-    final GoogleMapController controller = await _controller.future;
-    controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: location, zoom: 18.0)));
-  }
-
-  Future<void> _requestLocationPermission() async {
-    var permission = await _location.hasPermission();
-    if (permission == PermissionStatus.denied) {
-      permission = await _location.requestPermission();
-      if (permission != PermissionStatus.granted) {
-        // Handle the scenario when the permission is not granted.
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location permission required')));
-      } else {
-        _getLocation();
-      }
-    } else {
-      _getLocation();
-    }
-  }
-
-  Future<void> _getLocation() async {
-    try {
-      var location = await _location.getLocation();
-      setState(() {
-        _currentLocation = location;
-      });
-    } catch (e) {
-      // Handle any errors that occur while fetching the location.
-      print('Error getting location: $e');
-    }
-  }
-}
-
-void main() {
-  runApp(const MaterialApp(
-    home: MapSample(),
-  ));
 }
