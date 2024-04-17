@@ -1,64 +1,123 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
-import 'package:mapmyindia_gl/mapmyindia_gl.dart';
 
-void main() {
-  runApp(MapWithCurrentLocation());
-}
+import 'MyPage.dart';
 
-class MapWithCurrentLocation extends StatefulWidget {
+void main() => runApp(
+  MaterialApp(
+    home: MyApp(),
+  ),
+);
+
+class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
-  _MapWithCurrentLocationState createState() => _MapWithCurrentLocationState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class _MapWithCurrentLocationState extends State<MapWithCurrentLocation> {
-  LocationData? _currentLocation;
-  MapmyIndiaMapController? _mapController;
+class _MyAppState extends State<MyApp> {
+  late GoogleMapController mapController;
+  late Location location;
+  bool _isLocationEnabled = false;
+  late LatLng _currentLocation;
+
+  final LatLng _center = const LatLng(45.521563, -122.677433);
 
   @override
   void initState() {
     super.initState();
+    location = Location();
     _getCurrentLocation();
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      setState(() {
+        _currentLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+      });
+    });
+  }
+
+  void _onMapCreated(GoogleMapController controller) {
+    mapController = controller;
+    if (_isLocationEnabled) {
+      mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentLocation, 15.0),
+      );
+    }
   }
 
   Future<void> _getCurrentLocation() async {
     try {
-      Location location = Location();
-      LocationData currentLocation = await location.getLocation();
+      final currentLocationData = await location.getLocation();
       setState(() {
-        _currentLocation = currentLocation;
+        _currentLocation = LatLng(currentLocationData.latitude!, currentLocationData.longitude!);
+        _isLocationEnabled = true;
       });
-    } catch (e) {
-      print('Error getting current location: $e');
+    } catch (error) {
+      print("Error getting current location: $error");
     }
+  }
+
+  Future<void> _openForm(BuildContext context) async {
+    // Implement code to open the form here
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MyPage()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green[700],
+      ),
       home: Scaffold(
         appBar: AppBar(
-          title: Text('Map with Current Location'),
+          title: const Text('Maps Sample App'),
+          elevation: 2,
         ),
         body: Stack(
           children: [
-            if (_currentLocation != null)
-              MapmyIndiaMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(
-                    _currentLocation!.latitude!,
-                    _currentLocation!.longitude!,
+            GoogleMap(
+              onMapCreated: _onMapCreated,
+              initialCameraPosition: CameraPosition(
+                target: _center,
+                zoom: 11.0,
+              ),
+              markers: _isLocationEnabled
+                  ? {
+                Marker(
+                  markerId: MarkerId('currentLocation'),
+                  position: _currentLocation,
+                  infoWindow: const InfoWindow(
+                    title: 'Current Location',
                   ),
-                  zoom: 14.0,
                 ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
+              }
+                  : {},
+            ),
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton(
+                onPressed: _getCurrentLocation,
+                tooltip: 'Get Current Location',
+                child: Icon(Icons.location_searching),
+              ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child:ElevatedButton(
+                onPressed: () {
+                  _openForm(context);
                 },
-              ),
-            if (_currentLocation == null)
-              Center(
-                child: CircularProgressIndicator(),
-              ),
+                child: Icon(Icons.add),
+              )
+
+            ),
           ],
         ),
       ),
